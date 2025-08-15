@@ -15,12 +15,11 @@ def test_train_bpe_speed():
     """
     input_path = FIXTURES_PATH / "corpus.en"
     start_time = time.time()
-    # _, _ = run_train_bpe(
-    #     input_path=input_path,
-    #     vocab_size=500,
-    #     special_tokens=["<|endoftext|>"],
-    # )
-    assert NotImplementedError
+    _, _ = run_train_bpe(
+        input_path=input_path,
+        vocab_size=500,
+        special_tokens=["<|endoftext|>"],
+    )
     end_time = time.time()
     assert end_time - start_time < 1.5
 
@@ -69,11 +68,11 @@ def test_train_bpe_special_tokens(snapshot):
     merged with other tokens.
     """
     input_path = FIXTURES_PATH / "tinystories_sample_5M.txt"
-    # vocab, merges = run_train_bpe(
-    #     input_path=input_path,
-    #     vocab_size=1000,
-    #     special_tokens=["<|endoftext|>"],
-    # )
+    vocab, merges = run_train_bpe(
+        input_path=input_path,
+        vocab_size=1000,
+        special_tokens=["<|endoftext|>"],
+    )
 
     # Check that the special token is not in the vocab
     vocabs_without_specials = [word for word in vocab.values() if word != b"<|endoftext|>"]

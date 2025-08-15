@@ -18,16 +18,20 @@ with open(FIXTURES_PATH / 'output.txt', 'w', encoding='utf-8') as f:
 
     # test counter
     words_list = run_train_bpe.words_map_initializer(words)
-    cnt = run_train_bpe.counter(list(words.keys()), words, words_list)
-    print("The number of pairs = ",len(cnt))
+    cnt = run_train_bpe.counter(list(words.keys()), words_list)
+    print("The number of pairs = ", len(cnt))
 
     # test selector
-    print(run_train_bpe.selector(cnt))
-    check = {
-        (123, 321): 1, (321, 123): 1, (111, 333): 1, (333, 111): 1, 
-        (123, 21): 2, (21, 123): 2, (11, 333): 2, (333, 11): 2
-    }
-    print(run_train_bpe.selector(check))
+    vocab = run_train_bpe.vocab_initializer()
+    print(run_train_bpe.selector(cnt, vocab))
+    # check = {
+    #     (123, 321): 1, (321, 123): 1, (111, 333): 1, (333, 111): 1, 
+    #     (123, 21): 2, (21, 123): 2, (11, 333): 2, (333, 11): 2
+    # }
+    # print(run_train_bpe.selector(check))
+    cnt = {(1, 2): (1, ["he"]), (3, 4): (1, ["ab"])}
+    vocab = {1: b'h', 2: b'e', 3: b'a', 4: b'b'}
+    print(run_train_bpe.selector(cnt, vocab))
 
     import cProfile
     import pstats

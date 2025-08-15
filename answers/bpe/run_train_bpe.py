@@ -99,7 +99,7 @@ def pretokenize(input_path: str | os.PathLike, special_tokens: list[str], num_pr
 def translator(word: str) -> list[int]:
     return list(word.encode("utf-8"))
 
-def words_map_initializer(words: dict[str, int]) -> dict[str, list[int]]:
+def words_map_initializer(words: dict[str, int]) -> dict[str, tuple[int, list[int]]]:
     res = {}
     for word in words:
         res[word] = (words[word], translator(word))
@@ -116,15 +116,15 @@ def single_counter(words: list[str], words_map: dict[str, tuple[int, list[int]]]
     for word in words:
         word_list = words_map[word][1]
         for left, right in zip(word_list[:-1], word_list[1:]):
-            if (left, right) in res:
-                res[(left, right)] += words_map[word][0]
+            key = (left, right)
+            if key in res:
+                res[key] = (res[key][0] + words_map[word][0], res[key][1] + [word])
             else:
-                res[(left, right)] = words_map[word][0]
+                res[key] = (words_map[word][0], [word])
     with lock:
         for key, value in res.items():
             if key in shared_dict:
-                shared_dict[key][0] += value[0]
-                shared_dict[key][1] += value[1]
+                shared_dict[key] = (shared_dict[key][0] + res[key][0], shared_dict[key][1] + res[key][1])
             else:
                 shared_dict[key] = value
     return
@@ -151,10 +151,11 @@ def counter(words: list[str], words_map: dict[str, tuple[int, list[int]]], num_p
     return result
 
 def selector(tokens_map: dict[tuple[int, int], tuple[int, list[str]]], vocab: dict[int, bytes]) -> tuple[int, int]:
-    return max(tokens_map, key=lambda x: (tokens_map[x][0], (vocab(x[0]), vocab(x[1]))))
+    return max(tokens_map, key=lambda x: (tokens_map[x][0], vocab[x[0]], vocab[x[1]]))
 
 def merge(words_map: dict[str, tuple[int, list[int]]], tokens_map: dict[tuple[int, int], tuple[int, list[str]]], choice: tuple[int, int], new_num: int) -> tuple[dict[str, tuple[int, list[int]]], dict[tuple[int, int], tuple[int, list[str]]]]:
-    words = words_map[choice]
+    words = tokens_map[choice][1]
+    tokens_map[choice] = (0, [])
     for word in words:
         new_list = []
         l = words_map[word][1]
@@ -171,13 +172,12 @@ def merge(words_map: dict[str, tuple[int, list[int]]], tokens_map: dict[tuple[in
                     new_list.append(left)
             # Update tokens_map      
             if left == choice[1] or right == choice[0]:
-                tokens_map[(left, right)][0] = 0
-                tokens_map[(left, right)][1] = []
+                tokens_map[(left, right)] = (0, [])
         # insert last character if needed
         if not jump:
             new_list.append(l[-1])
-        words_map[word][1] = new_list
-    return (words_map, words_map)
+        words_map[word] = (words_map[word][0], new_list)
+    return (words_map, tokens_map)
 
 """Given the path to an input corpus, run train a BPE tokenizer and
 output its vocabulary and merges.
@@ -215,9 +215,10 @@ def run_train_bpe(
     begin = len(vocab)
     tokens_map = counter(words, words_map, num_processes)
     for i in range(begin, vocab_size):
-        choice = selector(words_map, vocab)
-        print(choice, tokens_map[choice])
-        words_map, tokens_map = merge(words_map, tokens_map, choice, i, num_processes)
+        choice = selector(tokens_map, vocab)
+        # print(vocab[choice[0]], vocab[choice[1]], tokens_map[choice])
+        words_map, tokens_map = merge(words_map, tokens_map, choice, i)
+        # print(type(words_map), type(tokens_map))
         choice = (vocab[choice[0]], vocab[choice[1]])
         merges.append(choice)
         vocab[i] = choice[0] + choice[1]
