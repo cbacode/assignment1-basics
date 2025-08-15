@@ -1,7 +1,9 @@
 import run_train_bpe
+import pathlib
 
-FIXTURES_PATH = '/home/cbacoding/llm/CS336/assignment1-basics/answers/bpe'
-input_path = FIXTURES_PATH + '/' + 'test.txt'
+FIXTURES_PATH = (pathlib.Path(__file__).resolve().parent)
+# FIXTURES_PATH = '/home/cbacoding/llm/CS336/assignment1-basics/answers/bpe'
+input_path = FIXTURES_PATH / 'test.txt'
 
 # test pretokenize
 words = run_train_bpe.pretokenize(input_path, ["<|endoftext|>"])
@@ -23,8 +25,25 @@ check = {
 }
 print(run_train_bpe.selector(check))
 
-vocab, merges = run_train_bpe.run_train_bpe(
-    input_path=input_path,
-    vocab_size=1000,
-    special_tokens=["<|endoftext|>"],
-)
+import cProfile
+import pstats
+
+# 创建一个Profiler对象
+profiler = cProfile.Profile()
+
+# 开始性能分析
+profiler.enable()
+
+# 运行代码
+vocab, merges = run_train_bpe.run_train_bpe(input_path=input_path, vocab_size=400, special_tokens=["<|endoftext|>"])
+# cnt = run_train_bpe.counter(list(words.keys()), words, words_list)
+
+# 结束性能分析
+profiler.disable()
+
+# 将分析结果保存到文件
+profiler.dump_stats(FIXTURES_PATH / 'profile_data')
+
+# 使用pstats模块将二进制文件转换成文本文件
+stats = pstats.Stats(str(FIXTURES_PATH / 'profile_data'))
+stats.sort_stats('cumtime').print_stats(10)
