@@ -41,9 +41,6 @@ vocab, merges = run_train_bpe.run_train_bpe(input_path=input_path, vocab_size=40
 # 结束性能分析
 profiler.disable()
 
-# 将分析结果保存到文件
-profiler.dump_stats(FIXTURES_PATH / 'profile_data')
-
 # 使用pstats模块将二进制文件转换成文本文件
-stats = pstats.Stats(str(FIXTURES_PATH / 'profile_data'))
+stats = pstats.Stats(profiler)
 stats.sort_stats('cumtime').print_stats(10)
