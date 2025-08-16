@@ -74,7 +74,8 @@ def single_pretokenize(chunk : str, special_tokens: list[str], shared_dict : dic
                 shared_dict[key] = value
     return
 
-def pretokenize(input_path: str | os.PathLike, special_tokens: list[str], num_processes = 8) -> dict[str, int]:
+# Multithread
+def pretokenize(input_path: str | os.PathLike, special_tokens: list[str], num_processes: int) -> dict[str, int]:
     manager = multiprocessing.Manager()
     shared_dict = manager.dict({})
     with open(input_path, "rb") as f:
@@ -96,6 +97,25 @@ def pretokenize(input_path: str | os.PathLike, special_tokens: list[str], num_pr
     result = dict(shared_dict)
     return result
 
+# Singlethread
+def pretokenize(input_path: str | os.PathLike, special_tokens: list[str]) -> dict[str, int]:
+    result = {}
+    PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
+    with open(input_path, "rb") as f:
+        chunk = f.read().decode("utf-8", errors="ignore")
+        strings = re.split("|".join(special_tokens), chunk) 
+            
+    for string in strings:
+        keys = re.finditer(PAT, string)
+        
+        for match in keys:
+            key = match.group()
+            if key in result:
+                result[key] += 1
+            else:
+                result[key] = 1
+    return result
+
 def translator(word: str) -> list[int]:
     return list(word.encode("utf-8"))
 
@@ -105,22 +125,29 @@ def words_map_initializer(words: dict[str, int]) -> dict[str, tuple[int, list[in
         res[word] = (words[word], translator(word))
     return res
 
-def vocab_initializer() -> dict[int, bytes]:
+def vocab_initializer(special_tokens: list[str]) -> dict[int, bytes]:
     res = {}
     for i in range(256):
         res[i] = bytes([i])
+    l = len(special_tokens)
+    for i in range(l):
+        res[i + 256] = bytes(special_tokens[i], "utf-8")
     return res
 
 def pair_updater(old: tuple[int, list[str]], val: int, words: list[str]) -> tuple[int, list[str]]:
-    if len(words) == 1 and old[1][-1] == words[0]:
-        # Words should be single
-        res = (old[0] + val, old[1])
-    else:
+    if val > 0:
         res = (old[0] + val, old[1] + words)
+    else:
+        assert words[0] in old[1], f"words = {words}, old[1] = {old[1]}"
+        assert old[0] + val >= 0, f"words = {words}, old[1] = {old[1]}"
+        for i in words:
+            old[1].remove(i)
+        res = (old[0] + val, old[1])
     return res
 
-def single_counter(words: list[str], words_map: dict[str, tuple[int, list[int]]], shared_dict: dict[tuple[int, int], tuple[int, list[str]]], lock):
+def counter(words_map: dict[str, tuple[int, list[int]]]) -> dict[tuple[int, int], tuple[int, list[str]]]:
     res = {}
+    words = words_map.keys()
     for word in words:
         word_list = words_map[word][1]
         for left, right in zip(word_list[:-1], word_list[1:]):
@@ -129,106 +156,68 @@ def single_counter(words: list[str], words_map: dict[str, tuple[int, list[int]]]
                 res[key] = pair_updater(res[key], words_map[word][0], [word])
             else:
                 res[key] = (words_map[word][0], [word])
-    with lock:
-        for key, value in res.items():
-            if key in shared_dict:
-                shared_dict[key] = pair_updater(shared_dict[key], res[key][0], res[key][1])
-            else:
-                shared_dict[key] = value
-    return
-
-def counter(words: list[str], words_map: dict[str, tuple[int, list[int]]], num_process: int = 8) -> dict[tuple[int, int], tuple[int, list[str]]]:
-    manager = multiprocessing.Manager()
-    shared_dict = manager.dict({})
-    processes = []
-    words_size = len(words)
-    chunk_size = words_size // num_process
-    boundaries = [i * chunk_size for i in range(num_process + 1)]
-    boundaries[-1] = words_size
-    # print(boundaries)
-    lock = multiprocessing.Lock()
-    for start, end in zip(boundaries[:-1], boundaries[1:]):
-        process = multiprocessing.Process(target = single_counter, args = (words[start:end], words_map, shared_dict, lock))
-        processes.append(process)
-        process.start()
-
-    for p in processes:
-        p.join()
-
-    result = dict(shared_dict)
-    return result
-
+    return res
+    
 def selector(tokens_map: dict[tuple[int, int], tuple[int, list[str]]], vocab: dict[int, bytes]) -> tuple[int, int]:
     return max(tokens_map, key=lambda x: (tokens_map[x][0], vocab[x[0]], vocab[x[1]]))
 
-def single_merge(words: list[str], words_map: dict[str, tuple[int, list[int]]], tokens_map: dict[tuple[int, int], tuple[int, list[str]]], choice: tuple[int, int], new_num: int, lock):
-    new_pairs = {}
-    for word in words:
-        new_list = []
-        l = words_map[word][1]
-        jump = False
-        for left, right in zip(l[:-1], l[1:]):
-            # Update words_map(Delete)
-            if jump:
-                jump = False
+def update_words_map(val: int, l: list[int], choice: tuple[int, int], new_num: int) -> tuple[tuple[int, list[int]], list[int]]:
+    new_list = []
+    loc = []
+    jump = False
+    bound = len(l) - 1
+    for i in range(bound):
+        # Update words_map
+        if jump:
+            jump = False
+        else:
+            if (l[i], l[i + 1]) == choice:
+                new_list.append(new_num)
+                loc.append(i)
+                jump = True
             else:
-                if (left, right) == choice:
-                    new_list.append(new_num)
-                    jump = True
-                else:
-                    new_list.append(left)
-            # Update tokens_map      
-            if left == choice[1] or right == choice[0]:
-                tokens_map[(left, right)] = (0, [])
-        # insert last character if needed
-        if not jump:
-            new_list.append(l[-1])
-        words_map[word] = (words_map[word][0], new_list)
-        
-        # Update tokens_map(Add)
-        l = new_list
-        for left, right in zip(l[:-1], l[1:]):
-            if left == new_num or right == new_num:
-                key = (left, right)
-                if key in new_pairs:
-                    new_pairs[key] = pair_updater(new_pairs[key], words_map[word][0], [word])
-                else:
-                    new_pairs[key] = (words_map[word][0], [word])
-    with lock:
-        for key, value in new_pairs.items():
-            if key in tokens_map:
-                tokens_map[key] = pair_updater(tokens_map[key], new_pairs[key][0], new_pairs[key][1])
-            else:
-                tokens_map[key] = value
+                new_list.append(l[i])
+    # insert last character if needed
+    if not jump:
+        new_list.append(l[-1])
+    return ((val, new_list), loc)
+
+def update_tokens_pairs(loc: list[int], word: str, val: int, l: list[int], tokens_map: dict[tuple[int, int], tuple[int, list[str]]]):
+    pairs = []
+    bound = len(l)
+    for iter in loc:
+        pairs.append((iter - 1, iter))
+        pairs.append((iter, iter + 1))
+        pairs.append((iter + 1, iter + 2))
+    for pair in set(pairs):
+        if pair[0] >= 0 and pair[1] < bound:
+            key = (l[pair[0]], l[pair[1]])
+            tokens_map[key] = pair_updater(tokens_map[key], -val, [word])
     return
 
-def merge(words_map: dict[str, tuple[int, list[int]]], tokens_map: dict[tuple[int, int], tuple[int, list[str]]], choice: tuple[int, int], new_num: int, num_process: int = 8) -> tuple[dict[str, tuple[int, list[int]]], dict[tuple[int, int], tuple[int, list[str]]]]:
-    manager = multiprocessing.Manager()
-    shared_tokens_map = manager.dict(tokens_map)
-    shared_words_map = manager.dict(words_map)
-    processes = []
-    words = tokens_map[choice][1]
-    words_size = len(words)
-    if words_size < num_process:
-        boundaries = [i for i in range(words_size + 1)]
-    else:
-        chunk_size = words_size // num_process
-        boundaries = [i * chunk_size for i in range(num_process + 1)]
-    boundaries[-1] = words_size
-    # print(boundaries)
-    lock = multiprocessing.Lock()
-    for start, end in zip(boundaries[:-1], boundaries[1:]):
-        process = multiprocessing.Process(target = single_merge, args = (words[start:end], shared_words_map, shared_tokens_map, choice, new_num, lock))
-        processes.append(process)
-        process.start()
+def add_tokens_pairs(word: str, val: int, l: list[int], tokens_map: dict[tuple[int, int], tuple[int, list[str]]], new_num: int):
+    for left, right in zip(l[:-1], l[1:]):
+        if left == new_num or right == new_num:
+            key = (left, right)
+            if key in tokens_map:
+                tokens_map[key] = pair_updater(tokens_map[key], val, [word])
+            else:
+                tokens_map[key] = (val, [word])
+    return
 
-    for p in processes:
-        p.join()
-    
-    words_map = dict(shared_words_map)
-    tokens_map = dict(shared_tokens_map)
+def merge(words_map: dict[str, tuple[int, list[int]]], tokens_map: dict[tuple[int, int], tuple[int, list[str]]], choice: tuple[int, int], new_num: int) -> tuple[dict[str, tuple[int, list[int]]], dict[tuple[int, int], tuple[int, list[str]]]]:
+    words = tokens_map[choice][1]
+    # words can occur multiple times.
+    for word in set(words):
+        # Update words_map
+        res = update_words_map(words_map[word][0], words_map[word][1], choice, new_num)
+        # Update tokens_map(Del)
+        update_tokens_pairs(res[1], word, words_map[word][0], words_map[word][1], tokens_map)
+        words_map[word] = res[0]
+        # Update tokens_map(Add)
+        add_tokens_pairs(word, words_map[word][0], words_map[word][1], tokens_map, new_num)
     tokens_map[choice] = (0, [])
-    return (words_map, tokens_map)
+    return words_map, tokens_map
 
 """Given the path to an input corpus, run train a BPE tokenizer and
 output its vocabulary and merges.
@@ -257,17 +246,21 @@ def run_train_bpe(
     special_tokens: list[str],
     **kwargs,
 ) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
-    num_processes = 32
-    words_cnt = pretokenize(input_path, special_tokens, num_processes)
-    words = list(words_cnt.keys())
-    vocab = vocab_initializer()
+    # Maybe because less data, single thread is faster
+    if 'num_processes' in kwargs:
+        words_cnt = pretokenize(input_path, special_tokens, kwargs['num_processes'])
+    else:
+        words_cnt = pretokenize(input_path, special_tokens)
+    vocab = vocab_initializer(special_tokens)
     merges = []
     words_map = words_map_initializer(words_cnt)
     begin = len(vocab)
-    tokens_map = counter(words, words_map, num_processes)
+    tokens_map = counter(words_map)
     for i in range(begin, vocab_size):
         choice = selector(tokens_map, vocab)
-        print(vocab[choice[0]], vocab[choice[1]], tokens_map[choice])
+        # (32, 115) means (b' ', b's'), (101, 114) means (b'e', b'r')
+        # print("(b' ', b's') = ", tokens_map[(32, 115)][0], "(b'e', b'r') = ", tokens_map[(101, 114)][0])
+        # print(vocab[choice[0]], vocab[choice[1]], tokens_map[choice][0], len(tokens_map[choice][1]))
         words_map, tokens_map = merge(words_map, tokens_map, choice, i)
         # print(type(words_map), type(tokens_map))
         choice = (vocab[choice[0]], vocab[choice[1]])

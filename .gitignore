@@ -164,3 +164,6 @@ cython_debug/
 
 # data should not be updated
 data/
+
+# old code should not be updated
+old/
