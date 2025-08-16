@@ -111,6 +111,14 @@ def vocab_initializer() -> dict[int, bytes]:
         res[i] = bytes([i])
     return res
 
+def pair_updater(old: tuple[int, list[str]], val: int, words: list[str]) -> tuple[int, list[str]]:
+    if len(words) == 1 and old[1][-1] == words[0]:
+        # Words should be single
+        res = (old[0] + val, old[1])
+    else:
+        res = (old[0] + val, old[1] + words)
+    return res
+
 def single_counter(words: list[str], words_map: dict[str, tuple[int, list[int]]], shared_dict: dict[tuple[int, int], tuple[int, list[str]]], lock):
     res = {}
     for word in words:
@@ -118,13 +126,13 @@ def single_counter(words: list[str], words_map: dict[str, tuple[int, list[int]]]
         for left, right in zip(word_list[:-1], word_list[1:]):
             key = (left, right)
             if key in res:
-                res[key] = (res[key][0] + words_map[word][0], res[key][1] + [word])
+                res[key] = pair_updater(res[key], words_map[word][0], [word])
             else:
                 res[key] = (words_map[word][0], [word])
     with lock:
         for key, value in res.items():
             if key in shared_dict:
-                shared_dict[key] = (shared_dict[key][0] + res[key][0], shared_dict[key][1] + res[key][1])
+                shared_dict[key] = pair_updater(shared_dict[key], res[key][0], res[key][1])
             else:
                 shared_dict[key] = value
     return
@@ -153,15 +161,14 @@ def counter(words: list[str], words_map: dict[str, tuple[int, list[int]]], num_p
 def selector(tokens_map: dict[tuple[int, int], tuple[int, list[str]]], vocab: dict[int, bytes]) -> tuple[int, int]:
     return max(tokens_map, key=lambda x: (tokens_map[x][0], vocab[x[0]], vocab[x[1]]))
 
-def merge(words_map: dict[str, tuple[int, list[int]]], tokens_map: dict[tuple[int, int], tuple[int, list[str]]], choice: tuple[int, int], new_num: int) -> tuple[dict[str, tuple[int, list[int]]], dict[tuple[int, int], tuple[int, list[str]]]]:
-    words = tokens_map[choice][1]
-    tokens_map[choice] = (0, [])
+def single_merge(words: list[str], words_map: dict[str, tuple[int, list[int]]], tokens_map: dict[tuple[int, int], tuple[int, list[str]]], choice: tuple[int, int], new_num: int, lock):
+    new_pairs = {}
     for word in words:
         new_list = []
         l = words_map[word][1]
         jump = False
         for left, right in zip(l[:-1], l[1:]):
-            # Update words_map
+            # Update words_map(Delete)
             if jump:
                 jump = False
             else:
@@ -177,6 +184,50 @@ def merge(words_map: dict[str, tuple[int, list[int]]], tokens_map: dict[tuple[in
         if not jump:
             new_list.append(l[-1])
         words_map[word] = (words_map[word][0], new_list)
+        
+        # Update tokens_map(Add)
+        l = new_list
+        for left, right in zip(l[:-1], l[1:]):
+            if left == new_num or right == new_num:
+                key = (left, right)
+                if key in new_pairs:
+                    new_pairs[key] = pair_updater(new_pairs[key], words_map[word][0], [word])
+                else:
+                    new_pairs[key] = (words_map[word][0], [word])
+    with lock:
+        for key, value in new_pairs.items():
+            if key in tokens_map:
+                tokens_map[key] = pair_updater(tokens_map[key], new_pairs[key][0], new_pairs[key][1])
+            else:
+                tokens_map[key] = value
+    return
+
+def merge(words_map: dict[str, tuple[int, list[int]]], tokens_map: dict[tuple[int, int], tuple[int, list[str]]], choice: tuple[int, int], new_num: int, num_process: int = 8) -> tuple[dict[str, tuple[int, list[int]]], dict[tuple[int, int], tuple[int, list[str]]]]:
+    manager = multiprocessing.Manager()
+    shared_tokens_map = manager.dict(tokens_map)
+    shared_words_map = manager.dict(words_map)
+    processes = []
+    words = tokens_map[choice][1]
+    words_size = len(words)
+    if words_size < num_process:
+        boundaries = [i for i in range(words_size + 1)]
+    else:
+        chunk_size = words_size // num_process
+        boundaries = [i * chunk_size for i in range(num_process + 1)]
+    boundaries[-1] = words_size
+    # print(boundaries)
+    lock = multiprocessing.Lock()
+    for start, end in zip(boundaries[:-1], boundaries[1:]):
+        process = multiprocessing.Process(target = single_merge, args = (words[start:end], shared_words_map, shared_tokens_map, choice, new_num, lock))
+        processes.append(process)
+        process.start()
+
+    for p in processes:
+        p.join()
+    
+    words_map = dict(shared_words_map)
+    tokens_map = dict(shared_tokens_map)
+    tokens_map[choice] = (0, [])
     return (words_map, tokens_map)
 
 """Given the path to an input corpus, run train a BPE tokenizer and
@@ -216,7 +267,7 @@ def run_train_bpe(
     tokens_map = counter(words, words_map, num_processes)
     for i in range(begin, vocab_size):
         choice = selector(tokens_map, vocab)
-        # print(vocab[choice[0]], vocab[choice[1]], tokens_map[choice])
+        print(vocab[choice[0]], vocab[choice[1]], tokens_map[choice])
         words_map, tokens_map = merge(words_map, tokens_map, choice, i)
         # print(type(words_map), type(tokens_map))
         choice = (vocab[choice[0]], vocab[choice[1]])

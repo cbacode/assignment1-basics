@@ -4,7 +4,7 @@ import sys
 
 FIXTURES_PATH = (pathlib.Path(__file__).resolve().parent)
 # FIXTURES_PATH = '/home/cbacoding/llm/CS336/assignment1-basics/answers/bpe'
-input_path = FIXTURES_PATH / 'test.txt'
+input_path = FIXTURES_PATH / 'test1.txt'
 
 with open(FIXTURES_PATH / 'output.txt', 'w', encoding='utf-8') as f:
     sys.stdout = f
@@ -51,4 +51,4 @@ with open(FIXTURES_PATH / 'output.txt', 'w', encoding='utf-8') as f:
 
     # 使用pstats模块将二进制文件转换成文本文件
     stats = pstats.Stats(profiler)
-    stats.sort_stats('cumtime').print_stats(10)
+    stats.sort_stats('cumtime').print_stats(20)
