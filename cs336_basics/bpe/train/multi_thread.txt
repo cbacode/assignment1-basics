@@ -1,0 +1,28 @@
+         197911341 function calls (197911129 primitive calls) in 86.869 seconds
+
+   Ordered by: cumulative time
+   List reduced from 423 to 20 due to restriction <20>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.031    0.031   86.870   86.870 /home/cbacoding/llm/CS336/assignment1-basics/cs336_basics/bpe/train/run_train_bpe.py:245(run_train_bpe)
+     9743    0.014    0.000   66.496    0.007 /home/cbacoding/llm/CS336/assignment1-basics/cs336_basics/bpe/train/run_train_bpe.py:163(selector)
+     9774   31.450    0.003   66.482    0.007 {built-in method builtins.max}
+196057308   35.032    0.000   35.032    0.000 /home/cbacoding/llm/CS336/assignment1-basics/cs336_basics/bpe/train/run_train_bpe.py:164(<lambda>)
+        1    0.013    0.013   19.334   19.334 /home/cbacoding/llm/CS336/assignment1-basics/cs336_basics/bpe/train/run_train_bpe.py:80(mul_pretokenize)
+        9    0.000    0.000   17.729    1.970 /home/cbacoding/miniconda3/envs/CS336/lib/python3.12/multiprocessing/process.py:142(join)
+        9    0.000    0.000   17.729    1.970 /home/cbacoding/miniconda3/envs/CS336/lib/python3.12/multiprocessing/popen_fork.py:36(wait)
+       47    0.000    0.000   17.727    0.377 /home/cbacoding/miniconda3/envs/CS336/lib/python3.12/multiprocessing/popen_fork.py:24(poll)
+       46   17.727    0.385   17.727    0.385 {built-in method posix.waitpid}
+    13112    0.007    0.000    1.465    0.000 <string>:1(__getitem__)
+    13113    0.018    0.000    1.463    0.000 /home/cbacoding/miniconda3/envs/CS336/lib/python3.12/multiprocessing/managers.py:808(_callmethod)
+    13120    0.022    0.000    1.121    0.000 /home/cbacoding/miniconda3/envs/CS336/lib/python3.12/multiprocessing/connection.py:245(recv)
+    13138    0.020    0.000    1.079    0.000 /home/cbacoding/miniconda3/envs/CS336/lib/python3.12/multiprocessing/connection.py:412(_recv_bytes)
+    26276    0.039    0.000    1.051    0.000 /home/cbacoding/miniconda3/envs/CS336/lib/python3.12/multiprocessing/connection.py:373(_recv)
+    26278    0.997    0.000    0.997    0.000 {built-in method posix.read}
+     9743    0.155    0.000    0.908    0.000 /home/cbacoding/llm/CS336/assignment1-basics/cs336_basics/bpe/train/run_train_bpe.py:210(merge)
+    68766    0.166    0.000    0.457    0.000 /home/cbacoding/llm/CS336/assignment1-basics/cs336_basics/bpe/train/run_train_bpe.py:187(update_tokens_pairs)
+    13119    0.021    0.000    0.327    0.000 /home/cbacoding/miniconda3/envs/CS336/lib/python3.12/multiprocessing/connection.py:201(send)
+   287859    0.215    0.000    0.310    0.000 /home/cbacoding/llm/CS336/assignment1-basics/cs336_basics/bpe/train/run_train_bpe.py:139(pair_updater)
+    13137    0.016    0.000    0.207    0.000 /home/cbacoding/miniconda3/envs/CS336/lib/python3.12/multiprocessing/connection.py:389(_send_bytes)
+
+

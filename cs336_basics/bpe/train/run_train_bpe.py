@@ -3,6 +3,8 @@ from typing import BinaryIO
 import regex as re
 import multiprocessing
 
+# uv run pytest tests/test_train_bpe.py
+
 def find_chunk_boundaries(
     file: BinaryIO,
     desired_num_chunks: int,
@@ -75,7 +77,7 @@ def single_pretokenize(chunk : str, special_tokens: list[str], shared_dict : dic
     return
 
 # Multithread
-def pretokenize(input_path: str | os.PathLike, special_tokens: list[str], num_processes: int) -> dict[str, int]:
+def mul_pretokenize(input_path: str | os.PathLike, special_tokens: list[str], num_processes: int) -> dict[str, int]:
     manager = multiprocessing.Manager()
     shared_dict = manager.dict({})
     with open(input_path, "rb") as f:
@@ -248,7 +250,7 @@ def run_train_bpe(
 ) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
     # Maybe because less data, single thread is faster
     if 'num_processes' in kwargs:
-        words_cnt = pretokenize(input_path, special_tokens, kwargs['num_processes'])
+        words_cnt = mul_pretokenize(input_path, special_tokens, kwargs['num_processes'])
     else:
         words_cnt = pretokenize(input_path, special_tokens)
     vocab = vocab_initializer(special_tokens)
