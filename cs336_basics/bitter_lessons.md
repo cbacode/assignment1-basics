@@ -10,3 +10,8 @@
 
 - 注意合并的顺序，贪心优化可能导致合并顺序出错
 - 若某些操作需要重复多次可以缓存对应的结果
+
+# attention
+
+- 使用einsum时要小心，必须将含义相同的字符串修改为相同的字符串
+return einsum(attn_probs, V, " ... queries keys,  ... values d_v ->  ... queries d_v")
