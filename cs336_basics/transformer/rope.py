@@ -27,7 +27,7 @@ def run_rope(
         Float[Tensor, " ... sequence_length d_k"]: Tensor with RoPEd input.
     """
     l = RoPE(theta, d_k, max_seq_len, in_query_or_key.device)
-    return l.forward(in_query_or_key, token_positions)
+    return l.brute_forward(in_query_or_key, token_positions)
 
 def singleton(cls):
     instances = {}
@@ -77,8 +77,9 @@ class RoPE(nn.Module):
         # if rot is a (..., seq_len, d_k, d_k) Tensor, then we can directly multiply it.
         rot = self.cache[token_positions]
         
-        x = rearrange(x, " ... seq_len (d_k_2 two) -> ... seq_len d_k_2 two", two = 2)
+        x = rearrange(x, " ... seq_len (d_k_2 two) -> ... seq_len d_k_2 two", d_k_2 = self.d_k // 2)
         res = einsum(x, rot, "... seq_len d_k_2 col, ... seq_len d_k_2 col row -> ... seq_len d_k_2 row")
+        # res = (x.unsqueeze(-1) @ rot).squeeze(-2)
         return rearrange(res, "... seq_len d_k_2 row -> ... seq_len (d_k_2 row)")
     
     def brute_forward(self, x: torch.Tensor, token_positions: torch.Tensor) -> torch.Tensor:

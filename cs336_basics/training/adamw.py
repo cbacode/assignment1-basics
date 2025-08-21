@@ -10,7 +10,7 @@ def get_adamw_cls() -> Any:
     """
     Returns a torch.optim.Optimizer that implements AdamW.
     """
-    return AdamW
+    # return AdamW
     return torch.optim.AdamW
 
 # uv run ./cs336_basics/training/sgd.py
@@ -36,19 +36,21 @@ class AdamW(torch.optim.Optimizer):
                 # Get state associated with p.
                 state = self.state[p]
                 # Get iteration number from the state, or initial value.
-                t = state.get("t", 1.0)
-                m = state.get("m", torch.zeros(p.data.size()))
-                v = state.get("v", torch.zeros(p.data.size()))
-                # Get the gradient of loss with respect to p.
+                t = state.get("t", int(1))
                 grad = p.grad.data
-                m = beta_1 * m + (1 - beta_1) * grad
-                v = beta_2 * v + (1 - beta_2) * grad * grad
-                lr_t = lr / (1 - pow(beta_1, t))
-                lr_t = lr_t * math.sqrt(1 - pow(beta_2, t))
+                m = state.get("m", torch.zeros(grad.size()))
+                v = state.get("v", torch.zeros(grad.size()))
+                # Get the gradient of loss with respect to p.
+                
+                m = beta_1 * m + (1.0 - beta_1) * grad
+                v = beta_2 * v + (1.0 - beta_2) * grad * grad
+                lr_t = lr / (1.0 - pow(beta_1, t))
+                lr_t = lr_t * math.sqrt(1.0 - pow(beta_2, t))
                 # Update weight tensor
+                p.data *= (1.0 - lr * lam)
                 p.data -= lr_t * m / (torch.sqrt(v) + eps)
-                p.data *= (1 - lr * lam)
-                state["t"] = t + 1.0 # Increment iteration number.
+                
+                state["t"] = t + 1 # Increment iteration number.
         return loss
 #  ACTUAL: array([[ 0.844594,  0.882026,  0.273672],
 # E              [ 0.023981, -0.626332, -0.385756]], dtype=float32)

@@ -108,8 +108,8 @@ class TransformerBlock(nn.Module):
         return
     
     def forward(self, in_features: Float[Tensor, " batch sequence_length d_model"]) -> Float[Tensor, " batch sequence_length d_model"]:
-        # attn = in_features + self.attn.forward_with_rope(self.norm_attn.forward(in_features))
-        attn = in_features + self.attn.forward(self.norm_attn.forward(in_features))
+        attn = in_features + self.attn.forward_with_rope(self.norm_attn.forward(in_features))
+        # attn = in_features + self.attn.forward(self.norm_attn.forward(in_features))
         res = attn + self.ffn.forward(self.norm_ffn.forward(attn))
         # attn = self.attn.forward_with_rope(self.norm_attn.forward(in_features))
         # res = in_features + self.ffn.forward(self.norm_ffn.forward(attn))
